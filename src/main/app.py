@@ -1,61 +1,38 @@
 import streamlit as st
 
 from src.backend.data_loader import load_data
-from src.backend.dataset_summary import get_dataset_summary
-from src.backend.dataset_analyzer import analyze_dataset
+from src.frontend.workspace import show_workspace
+from src.frontend.sidebar import show_sidebar
+from src.frontend.home import show_home
+from src.core.app_state import app_state
 
-
-def main():
-
+def initialize_application():
     st.set_page_config(
         page_title="DataMindAI",
         page_icon="🧠",
         layout="wide"
     )
 
-    st.title("🧠 DataMindAI")
+def load_dataset(uploaded_file):
+    app_state.dataset = load_data(uploaded_file)
+    app_state.dataset_name = uploaded_file.name
 
-    st.subheader("Your AI-Powered Data Analytics Assistant")
+def main():
 
-    uploaded_file = st.file_uploader(
-        "Upload your dataset",
-        type=["csv", "xlsx"]
-    )
+    initialize_application()
+    
+    uploaded_file = show_sidebar()
+
 
     if uploaded_file:
-
-        st.success("Dataset uploaded successfully!")
-
-        df = load_data(uploaded_file)
-
-        summary = get_dataset_summary(df)
-
-        analysis = analyze_dataset(df)
-
-        st.subheader("📊 Dataset Overview")
-
-        st.write(f"Rows : {summary['Rows']}")
-
-        st.write(f"Columns : {summary['Columns']}")
-
-        st.write(f"Missing Values : {summary['Missing Values']}")
-
-        st.write(f"Duplicate Rows : {summary['Duplicate Rows']}")
-
-        st.divider()
-
-        st.subheader("🧠 Dataset Intelligence")
-
-        st.write(f"Numerical Columns : {analysis['Numerical Columns']}")
-
-        st.write(f"Categorical Columns : {analysis['Categorical Columns']}")
-
-        st.write(f"Missing Values : {analysis['Missing Values']}")
-
-        st.write(f"Duplicate Rows : {analysis['Duplicate Rows']}")
-
-        st.divider()
-
-        st.subheader("📄 Dataset Preview")
-
-        st.dataframe(df.head())
+        
+        if (not app_state.has_dataset() or app_state.dataset_name != uploaded_file.name):
+            load_dataset(uploaded_file)
+            show_workspace()
+        
+    else:
+        show_home()
+        
+if __name__ == "__main__":
+    main()
+        
