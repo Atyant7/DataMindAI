@@ -5,6 +5,7 @@ from src.frontend.workspace import show_workspace
 from src.frontend.sidebar import show_sidebar
 from src.frontend.home import show_home
 from src.core.app_state import app_state
+from src.backend.dataset_intelligence import DatasetIntelligence
 
 def initialize_application():
     st.set_page_config(
@@ -14,8 +15,18 @@ def initialize_application():
     )
 
 def load_dataset(uploaded_file):
-    app_state.dataset = load_data(uploaded_file)
+    #Load dataframe
+    dataframe = load_data(uploaded_file)
+    
+    #Store Dataframe
+    app_state.dataset = dataframe
     app_state.dataset_name = uploaded_file.name
+    
+    #Analyze dataset
+    intelligence = DatasetIntelligence( dataframe, uploaded_file.name )
+    
+    #store dataset profile
+    app_state.dataset_profile = intelligence.generate_profile()
 
 def main():
 
