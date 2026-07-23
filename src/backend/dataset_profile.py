@@ -26,9 +26,6 @@ class DatasetProfile:
     health_score: int = 100
     health_status: str = "Excellent"
 
-    warnings: list = field(default_factory=list)
-    recommendations: list = field(default_factory=list)
-
     # Column Information
     numerical_columns: list = field(default_factory=list)
     categorical_columns: list = field(default_factory=list)
@@ -36,10 +33,24 @@ class DatasetProfile:
     boolean_columns: list = field(default_factory=list)
     numerical_statistics: dict = field(default_factory=dict)
     categorical_statistics: dict = field(default_factory=dict)
+    
 
-    # AI Suggestions
+    # Target Analysis
     possible_target_columns: list = field(default_factory=list)
 
-    recommended_task: str = ""
+    detected_task: str = ""
 
     recommended_visualizations: list = field(default_factory=list)
+    
+    # Correlation Analysis
+    correlation_metrix : object = None
+    correlation_insights: list = field(default_factory=list)
+    
+    # For Outliers
+    outlier_summary: list = field(default_factory=list)
+    
+    # Distribution
+    distribution_summary : list = field(default_factory=list)
+    
+    # Feature Quality
+    feature_quality_summary: list = field(default_factory=list)

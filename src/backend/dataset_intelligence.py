@@ -16,8 +16,11 @@ class DatasetIntelligence:
         self._cancluate_health_score(profile)
         self._get_column_information(profile)
         self._get_column_statistics(profile)
+        self._analyze_correlation(profile)
         self._get_visualization_recommendations(profile)
-        self._generate_recommendations(profile)
+        self._analyze_outliers(profile)
+        self._analyze_distribution(profile)
+        self._analyze_feature_quality(profile)
         return profile 
     
     
@@ -168,72 +171,238 @@ class DatasetIntelligence:
         
         profile.recommended_visualizations = recommendations
         
-    def _generate_recommendations(self, profile):
+        
+    def _analyze_correlation(self, profile):
+        # ---------------------------------------
+        # 1. Get Numerical Columns
+        # ---------------------------------------
+        
+        numerical_columns = profile.numerical_columns
+        
+        if len(numerical_columns) < 2:
+            return
+        
+        # ---------------------------------------
+        # 2. Compute Correlation Matrix
+        # ---------------------------------------
+        
+        correlation_metrix = self.df[numerical_columns].corr(method='pearson')
+        
+        # ---------------------------------------
+        # 3. Generate Correlation Insights
+        # ---------------------------------------
+        
+        correlation_insights = []
+        
+        for i in range(len(numerical_columns)):
+            for j in range(i+1, len(numerical_columns)):
+                column1 = numerical_columns[i]
+                column2 = numerical_columns[j]
+                correlation = correlation_metrix.loc[column1, column2]
+                if abs(correlation) < 0.40:
+                    continue
+                if correlation > 0:
+                    correlation_type = 'Positive'
+                    if correlation >= 0.80:
+                        strength = "Very Strong Positive"
+                    elif correlation >= 0.60:
+                        strength = "Strong Positive"
+                    else:
+                        strength = "Moderate Positive"
+                else:
+                    correlation_type = "Negative"
+                    if correlation <= -0.80:
+                        strength = "Very Strong Negative"
+                    elif correlation <= -0.60:
+                        strength = "Strong Negative"
+                    else:
+                        strength = "Moderate Negative"
+                if correlation > 0:
+                    observation = (
+                        f"{column1} and {column2} show a positive relationship."
+                    )
+                else:
+                    observation = (
+                        f"{column1} and {column2} show a positive relationship."
+                    )
+                correlation_insights.append({
+                    'column_1': column1,
+                    'column_2': column2,
+                    'correlation': round(correlation , 2),
+                    "strength": strength,
+                    "type": correlation_type,
+                    'observation' : observation
+                })
+                        
+
+        # ---------------------------------------
+        # 4. Sort Insights
+        # ---------------------------------------
+
+        correlation_insights.sort(key=lambda insight : abs(insight['correlation']), reverse=True)
+        
+        # ---------------------------------------
+        # 5. Save Results
+        # ---------------------------------------
+        
+        profile.correlation_metrix = correlation_metrix
+        profile.correlation_insights = correlation_insights
+        
+        
+    def _analyze_outliers(self, profile):
+        
+        #-------------------------------------------------------
+        # Outlier Summary
+        #-------------------------------------------------------
+    
+        numerical_columns = profile.numerical_columns
+        if len(numerical_columns) == 0:
+            return
+        outlier_summary = []
+        for column in numerical_columns:
+            data = self.df[column].dropna()
+            q1 = data.quantile(0.25)
+            q3 = data.quantile(0.75)
+            iqr = q3 - q1
+            lower_bound = q1 - (1.5 * iqr)
+            upper_bound = q3 + (1.5 * iqr)
+            outliers = data[(data < lower_bound) | (data > upper_bound)]
+            outlier_count = len(outliers)
+            percentage = (outlier_count / len(data))*100
+            
+            if outlier_count == 0:
+                status = "None"
+
+            elif percentage <= 5:
+                status = "Low"
+
+            elif percentage <= 15:
+                status = "Moderate"
+
+            else:
+                status = "High"
+            if status == "None":
+                observation = "No outliers were detected."
+
+            elif status == "Low":
+                observation = "A small proportion of observations are identified as outliers."
+
+            elif status == "Moderate":
+                observation = "A moderate proportion of observations are identified as outliers."
+
+            else:
+                observation = "A high proportion of observations are identified as outliers."
+            
+            outlier_summary.append({
+                'column' : column,
+                'outliers' : outlier_count,
+                'percentage' : round(percentage, 2),
+                'lower_bound' : round(lower_bound, 2),
+                'upper_bound' : round(upper_bound, 2),
+                'status' : status,
+                'observation' : observation
+            })
+        
+        outlier_summary.sort(
+            key=lambda item : item['percentage'],
+            reverse=True
+        )
+        
+        profile.outlier_summary = outlier_summary
+    
+    
+    def _analyze_distribution(self, profile):
+        numerical_columns = profile.numerical_columns
+        if len(numerical_columns) == 0:
+            return
+        distribution_summary = []
+        for column in numerical_columns:
+            data = self.df[column].dropna()
+            if len(data) < 8:
+                distribution_summary.append(
+                    {
+                        "column": column,
+                        "skewness": None,
+                        "distribution": "Insufficient Data",
+                        "severity": "Unknown",
+                        "observation": "There are not enough observations to analyze the distribution."
+                    })
+                continue
+            
+            skewness = data.skew()
+            
+            absolute_skewness = abs(skewness)
+            if absolute_skewness < 0.5:
+                severity = "Symmetric"
+
+            elif absolute_skewness < 1:
+                severity = "Mild"
+
+            elif absolute_skewness < 2:
+                severity = "Moderate"
+
+            else:
+                severity = "Severe"
+            #-----------------------------------------------------
+            if skewness > 0.5:
+                distribution = "Right Skewed"
+
+            elif skewness < -0.5:
+                distribution = "Left Skewed"
+
+            else:
+                distribution = "Approximately Symmetric"
+            #---------------------––---–----–------------–-–-–––––––    
+            if severity == "Symmetric":
+                observation = "The feature is approximately symmetric."
+
+            elif severity == "Mild":
+                observation = "The feature is mildly skewed."
+
+            elif severity == "Moderate":
+                observation = "The feature is moderately skewed."
+
+            else:
+                observation = "The feature is heavily skewed."
+                
+            distribution_summary.append({
+                'column' : column,
+                'skewness' : round(skewness, 2),
+                'distribution' : distribution,
+                'severity' : severity,
+                'observation' : observation
+            })
+        
+        distribution_summary.sort(
+            key=lambda item : abs(item['skewness']) if item['skewness'] is not None else -1,
+            reverse=True
+        )
+            
+        profile.distribution_summary = distribution_summary
+     
+     
+    # Helper Function For _analyze_feature_quality   
+    def _add_feature_quality(self, qualities, quality, status, observation):
+        qualities.append({
+            "quality": quality,
+            "status": status,
+            "observation": observation
+        })
+    
+    def _analyze_feature_quality(self, profile):
         """
-        Generates intelligent recommendations for the dataset.
+        Analyze the quality of each feature and detect meaningful characteristics.
         """
+        feature_quality_summary = []
+
+        for column in self.df.columns:
+            data = self.df[column]
+            qualities = []
+            
         
-        recommendations = []
         
-        # Missing values
-        if profile.missing_values > 0 :
-            recommendations.append({
-                "type": "Cleaning",
-                "priority": "High",
-                "message": (
-                    "Missing values detected. "
-                    "Consider imputing or removing them."
-                )   
-            }) 
-        # Duplicate Rows
-        if profile.duplicate_rows > 0:
-
-            recommendations.append({
-                "type": "Cleaning",
-                "priority": "High",
-                "message": (
-                    "Duplicate rows detected. "
-                    "Consider removing them."
-                )
-            })
-
-        # Categorical Columns
-        if len(profile.categorical_columns) > 0:
-
-            recommendations.append({
-                "type": "Machine Learning",
-                "priority": "Medium",
-                "message": (
-                    "Categorical columns should be encoded "
-                    "before training most machine learning models."
-                )
-            })
-
-        # Health Score
-        if profile.health_score < 75:
-
-            recommendations.append({
-                "type": "Quality",
-                "priority": "High",
-                "message": (
-                    "Dataset quality is below the recommended level. "
-                    "Perform data cleaning before analysis."
-                )
-            })
-
-        # Numerical Columns
-        if len(profile.numerical_columns) > 0:
-
-            recommendations.append({
-                "type": "Visualization",
-                "priority": "Low",
-                "message": (
-                    "Use histograms and box plots to explore "
-                    "the distribution of numerical features."
-                )
-            })
         
-        profile.recommendations = recommendations
+        profile.feature_quality_summary = feature_quality_summary
     
     def _format_memory(self, memory):
         """
