@@ -21,6 +21,7 @@ class DatasetIntelligence:
         self._analyze_outliers(profile)
         self._analyze_distribution(profile)
         self._analyze_feature_quality(profile)
+        self._analyze_target(profile)
         return profile 
     
     
@@ -399,10 +400,258 @@ class DatasetIntelligence:
             data = self.df[column]
             qualities = []
             
-        
-        
+            total_rows = len(data)
+            non_null = data.dropna()
+            
+            # ---------------------------------------------
+            # Empty Column
+            # ---------------------------------------------
+            if non_null.empty:
+                self._add_feature_quality(
+                    qualities,
+                    "Empty",
+                    "High",
+                    "This feature contains no usable values."
+                )
+            
+            # ---------------------------------------------
+            # Constant Feature
+            # ---------------------------------------------
+            if non_null.nunique() == 1:
+                self._add_feature_quality(
+                    qualities,
+                    "Constant",
+                    "High",
+                    "This feature contains only one unique value."
+                )
+            
+            # ---------------------------------------------
+            # Unique Identifier
+            # ---------------------------------------------
+            if len(non_null) > 0 and non_null.nunique() == len(non_null):
+                self._add_feature_quality(
+                    qualities,
+                    "Unique Identifier",
+                    "High",
+                    "This feature appears to uniquely identify each record."
+                )
+            
+            # ---------------------------------------------
+            # Near Constant
+            # ---------------------------------------------
+            if len(non_null) > 0:
+                dominant_ratio = non_null.value_counts(normalize=True).iloc[0]
+                if dominant_ratio >= 0.95 and non_null.nunique() > 1:
+                    self._add_feature_quality(
+                        qualities,
+                        "Near Constant",
+                        "Moderate",
+                        "The feature is dominated by a single value."
+                    )
+            
+            # ---------------------------------------------
+            # High Cardinality
+            # --------------------------------------------
+            if len(non_null) > 0:
+                unique_ratio = non_null.nunique() / len(non_null)
+                if unique_ratio >= 0.90 and non_null.nunique() > 20:
+                    self._add_feature_quality(
+                        qualities,
+                        "High Cardinality",
+                        "Moderate",
+                        "The feature contains large number of unique values."
+                    )
+                    
+            # ---------------------------------------------
+            # Low Variance
+            # ---------------------------------------------
+            if pd.api.types.is_numeric_dtype(data):
+                variance = non_null.var()
+                if variance is not None and not pd.isna(variance) and variance < 0.01:
+                    self._add_feature_quality(
+                        qualities,
+                        "Low Variance",
+                        "Low",
+                        "The feature exhibits very little variation."
+                    )
+                    
+            # ---------------------------------------------
+            # Store only meaningful columns
+            # ---------------------------------------------
+            if qualities:
+                feature_quality_summary.append({
+                    "column" : column,
+                    "dtype" : str(data.dtype),
+                    "qualities" : qualities
+                })
+                
+        feature_quality_summary.sort(
+            key=lambda item: len(item["qualities"]),
+            reverse=True
+        )
         
         profile.feature_quality_summary = feature_quality_summary
+    
+    
+    def _analyze_target(self, profile):
+        """
+        Analyze the dataset and identify the most probable target column.
+        """
+
+        candidate_scores = {}
+
+        target_analysis = {
+            "target_column": None,
+            "confidence": "Low",
+            "problem_type": None,
+            "classification_type": None,
+            "num_classes": None,
+            "class_distribution": None,
+            "is_imbalanced": None,
+            "observation": None
+        }
+        
+        target_keywords = {"target","label","class","output","result","outcome","price","salary","sales","profit","purchased","survived", "diagnosis", "income", "response", "default", "loan_status", "fraud", "churn"}
+
+        
+        for column in self.df.columns:
+            candidate_scores[column] = 0            
+            column_name = column.lower()
+            for keyword in target_keywords:
+                if keyword in column_name:
+                    candidate_scores[column] += 40
+                    break
+            
+            if column == self.df.columns[-1]:
+                candidate_scores[column] += 15
+            
+            missing_ratio = self.df[column].isna().mean()
+            if missing_ratio <= 0.05:
+                candidate_scores[column] += 10
+                
+            for feature in profile.feature_quality_summary:
+                if feature["column"] != column:
+                    continue
+                
+                for quality in feature['qualities']:
+                    if quality["quality"] == "Unique Identifier":
+                        candidate_scores[column] -= 100
+                    if quality['quality'] == "Constant":
+                        candidate_scores[column] -= 100
+                    if quality['quality'] == 'Empty':
+                        candidate_scores[column] -= 100
+                    
+            series = self.df[column].dropna()
+            unique_values = series.nunique()      # <-- CHANGED
+
+            if pd.api.types.is_numeric_dtype(series):
+                if unique_values > 20:
+                    candidate_scores[column] += 10
+                elif 2 <= unique_values <= 20:
+                    candidate_scores[column] += 20
+            else:                                 # <-- CHANGED
+                if 2 <= unique_values <= 20:
+                    candidate_scores[column] += 20
+        
+        # --------------------------------------------------
+        # Select the best target column
+        # --------------------------------------------------
+        best_target = max(candidate_scores, key=candidate_scores.get)
+
+        target_analysis["target_column"] = best_target
+        
+        # ---------------------------------------------
+        # Confidence
+        # ---------------------------------------------
+        sorted_scores = sorted(candidate_scores.values(), reverse=True)
+        if len(sorted_scores) == 1:
+            target_analysis['confidence'] = 'High'
+        else:
+            difference = sorted_scores[0] - sorted_scores[1]
+            if difference >= 30:
+                target_analysis['confidence'] = 'High'
+            elif difference >= 15:
+                target_analysis['confidence'] = "Moderate"
+            else:
+                target_analysis['confidence'] = "Low"
+        
+        # ---------------------------------------------
+        # Analyze Selected Target
+        # ---------------------------------------------  
+        target_series = self.df[best_target].dropna()
+        unique_values = target_series.nunique()
+        if pd.api.types.is_numeric_dtype(target_series) and unique_values > 20:
+            target_analysis['problem_type'] = 'Regression'
+            target_analysis['observation'] = "The selected target appears to represent a continuous regression problem."
+        else:
+            target_analysis["problem_type"] = "Classification"
+            target_analysis["num_classes"] = unique_values
+            
+            # ---------------------------------------------
+            # Classification Type
+            # ---------------------------------------------
+            if unique_values == 2:
+                target_analysis["classification_type"] = "Binary"
+            else:
+                target_analysis['classification_type'] = "Multiclass"
+        
+            # ---------------------------------------------
+            # Class Distribution
+            # ---------------------------------------------
+            class_distribution = (
+                target_series.value_counts().to_dict()
+            )
+
+            target_analysis["class_distribution"] = class_distribution
+        
+            # ---------------------------------------------
+            # Imbalance Detection
+            # ---------------------------------------------
+            if class_distribution:
+                total_samples = sum(class_distribution.values())
+                minority_ratio = (
+                    min(class_distribution.values()) / total_samples
+                )
+                target_analysis["is_imbalanced"] = (
+                    minority_ratio < 0.20
+                )
+            else:
+                target_analysis["is_imbalanced"] = None
+            
+            # ---------------------------------------------
+            # Observation
+            # ---------------------------------------------
+            if target_analysis["classification_type"] == "Binary":
+
+                if target_analysis["is_imbalanced"]:
+
+                    target_analysis["observation"] = (
+                        "The selected target appears to represent an imbalanced binary classification problem."
+                    )
+
+                else:
+
+                    target_analysis["observation"] = (
+                        "The selected target appears to represent a balanced binary classification problem."
+                    )
+
+            else:
+
+                if target_analysis["is_imbalanced"]:
+
+                    target_analysis["observation"] = (
+                        "The selected target appears to represent an imbalanced multiclass classification problem."
+                    )
+
+                else:
+
+                    target_analysis["observation"] = (
+                        "The selected target appears to represent a balanced multiclass classification problem."
+                    )
+            
+        profile.target_analysis = target_analysis
+        
+    
     
     def _format_memory(self, memory):
         """

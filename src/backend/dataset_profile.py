@@ -54,3 +54,6 @@ class DatasetProfile:
     
     # Feature Quality
     feature_quality_summary: list = field(default_factory=list)
+    
+    # Target Analysis
+    target_analysis: dict = field(default_factory=dict)
