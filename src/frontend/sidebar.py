@@ -3,6 +3,7 @@ from src.core.config import SUPPORTED_FILE_TYPES
 
 def show_sidebar():
     st.sidebar.title("DataMindAI")
+    st.sidebar.caption("AI Data Scientist")
     
     st.sidebar.divider()
     
@@ -13,13 +14,6 @@ def show_sidebar():
     
     st.sidebar.divider()
     
-    st.sidebar.subheader("📊 Dataset Information")
-
-    st.sidebar.info(
-        "No dataset uploaded."
-    )
-
-    st.sidebar.divider()
 
     if st.sidebar.button("💬 New Chat"):
 
@@ -30,9 +24,5 @@ def show_sidebar():
         st.sidebar.warning("Session Cleared!")
 
     st.sidebar.divider()
-
-    st.sidebar.subheader("⚙ Settings")
-
-    st.sidebar.write("Coming Soon...")
 
     return uploaded_file

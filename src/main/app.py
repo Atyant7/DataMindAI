@@ -6,6 +6,8 @@ from src.frontend.sidebar import show_sidebar
 from src.frontend.home import show_home
 from src.core.app_state import app_state
 from src.backend.dataset_intelligence import DatasetIntelligence
+from src.backend.preprocessing_intelligence import PreprocessingIntelligence
+from src.frontend.preprocessing_workspace import show_processing_workspace
 
 def initialize_application():
     st.set_page_config(
@@ -25,24 +27,53 @@ def load_dataset(uploaded_file):
     #Analyze dataset
     intelligence = DatasetIntelligence( dataframe, uploaded_file.name )
     
+    profile = intelligence.generate_profile()
+    
     #store dataset profile
-    app_state.dataset_profile = intelligence.generate_profile()
+    app_state.dataset_profile = profile
+    
+    # ---------------------------------------------
+    # Preprocessing Intelligence
+    # ---------------------------------------------
+    preprocessing = PreprocessingIntelligence(
+        dataframe,
+        profile
+    )
+
+    app_state.preprocessing_plan = (
+        preprocessing.generate_plan()
+    )
 
 def main():
 
     initialize_application()
     
-    uploaded_file = show_sidebar()
+    uploaded_file, page = show_sidebar()
 
-
-    if uploaded_file:
-        
-        if (not app_state.has_dataset() or app_state.dataset_name != uploaded_file.name):
-            load_dataset(uploaded_file)
-            show_workspace()
-        
-    else:
+    # ---------------------------------------------
+    # No Dataset Uploaded
+    # ---------------------------------------------
+    if not uploaded_file:
         show_home()
+        return
+
+    # ---------------------------------------------
+    # Load Dataset Only Once
+    # ---------------------------------------------
+    if (
+        not app_state.has_dataset()
+        or app_state.dataset_name != uploaded_file.name
+    ):
+        load_dataset(uploaded_file)
+
+    # ---------------------------------------------
+    # Workspace Navigation
+    # ---------------------------------------------
+    if page == "Dataset Intelligence":
+        pass
+
+    elif page == "Preprocessing Intelligence":
+        pass
         
 if __name__ == "__main__":
     main()

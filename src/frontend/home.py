@@ -29,28 +29,4 @@ Upload your dataset and ask questions in natural language.
 
     st.divider()
 
-    st.subheader("✨ What I Can Do")
-
-    st.markdown(
-        """
-- 📊 Dataset Analysis
-
-- 📈 Data Visualization
-
-- 🧹 Data Cleaning
-
-- 🤖 Machine Learning
-
-- 📉 Prediction
-
-- 🧠 Explain AI Models
-
-- 📄 Generate Reports
-
-- 🌍 Business Reasoning using External Knowledge
-"""
-    )
-
-    st.divider()
-
-    st.info("⬅ Upload a dataset from the sidebar to get started.")
+    st.info("⬅ Upload a dataset from the sidebar. I'll analyze it automatically and we'll start chatting.")

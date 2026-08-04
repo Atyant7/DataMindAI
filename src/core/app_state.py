@@ -7,9 +7,11 @@ class AppState:
         self.dataset = None
         self.dataset_name = None
         self.dataset_profile = None
-        self.model = None
+        self.preprocessing_plan = None
+        self.trained_model = None
         self.chat_history = []
-        self.current_report = None
+        self.current_figure = None
+        self.current_task = None
         self.generated_chart = []
         
     def has_dataset(self):
