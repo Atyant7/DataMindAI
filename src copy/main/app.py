@@ -1,14 +1,13 @@
 import streamlit as st
 
 from src.backend.data_loader import load_data
-# from src.frontend.workspace import show_workspace
+from src.frontend.workspace import show_workspace
 from src.frontend.sidebar import show_sidebar
 from src.frontend.home import show_home
 from src.core.app_state import app_state
 from src.backend.dataset_intelligence import DatasetIntelligence
 from src.backend.preprocessing_intelligence import PreprocessingIntelligence
-# from src.frontend.preprocessing_workspace import show_processing_workspace
-from src.frontend.chat_page import show_chat_page
+from src.frontend.preprocessing_workspace import show_processing_workspace
 
 def initialize_application():
     st.set_page_config(
@@ -49,7 +48,7 @@ def main():
 
     initialize_application()
     
-    uploaded_file = show_sidebar()
+    uploaded_file, page = show_sidebar()
 
     # ---------------------------------------------
     # No Dataset Uploaded
@@ -67,7 +66,14 @@ def main():
     ):
         load_dataset(uploaded_file)
 
-    show_chat_page()
+    # ---------------------------------------------
+    # Workspace Navigation
+    # ---------------------------------------------
+    if page == "Dataset Intelligence":
+        pass
+
+    elif page == "Preprocessing Intelligence":
+        pass
         
 if __name__ == "__main__":
     main()

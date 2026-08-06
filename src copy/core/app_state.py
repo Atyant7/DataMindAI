@@ -13,7 +13,6 @@ class AppState:
         self.current_figure = None
         self.current_task = None
         self.generated_chart = []
-        self.agent = None
         
     def has_dataset(self):
         return self.dataset is not None
