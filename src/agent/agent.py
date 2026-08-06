@@ -113,6 +113,6 @@ class DataMindAgent:
         messages.append({'role' : 'user' , 'content' : prompt})
         
         response = chat(model=self.model , messages=messages)
-        
-        return['messages']['content']
+        # print(response)
+        return str(response)
         
