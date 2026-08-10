@@ -1,13 +1,16 @@
-import streamlit as st 
+import streamlit as st
+
 from src.core.app_state import app_state
 from src.agent.agent import DataMindAgent
+
 
 def show_chat_page():
     """
     Main conversational interface of DataMindAI.
     """
+
     profile = app_state.dataset_profile
-    
+
     # ---------------------------------------------
     # Header
     # ---------------------------------------------
@@ -16,7 +19,7 @@ def show_chat_page():
     st.caption("Your Autonomous AI Data Scientist")
 
     st.divider()
-    
+
     # ---------------------------------------------
     # Dataset Summary
     # ---------------------------------------------
@@ -47,13 +50,13 @@ def show_chat_page():
     st.divider()
 
     # ---------------------------------------------
-    # Initializing Agent
-    #----------------------------------------------
+    # Initialize Agent
+    # ---------------------------------------------
     if app_state.agent is None:
         app_state.agent = DataMindAgent()
 
     agent = app_state.agent
-    
+
     # ---------------------------------------------
     # Initialize Chat History
     # ---------------------------------------------
@@ -61,8 +64,7 @@ def show_chat_page():
 
         app_state.chat_history.append({
             "role": "assistant",
-            "content":
-            f"""
+            "content": """
 Hello! I'm **DataMindAI** 👋
 
 I've already analyzed your dataset and prepared a preprocessing plan.
@@ -101,20 +103,52 @@ How can I help you today?
 
     if prompt:
 
-        app_state.chat_history.append({
-            "role": "user",
-            "content": prompt
-        })
-
+        # -----------------------------------------
+        # Display User Message
+        # -----------------------------------------
         with st.chat_message("user"):
             st.markdown(prompt)
 
+        # -----------------------------------------
+        # Get Agent Response
+        # -----------------------------------------
         with st.spinner("Thinking..."):
+
             response = agent.chat(
                 prompt,
                 app_state.chat_history
             )
 
+        # -----------------------------------------
+        # Display Response
+        # -----------------------------------------
+        with st.chat_message("assistant"):
+
+            if response["type"] == "visualization":
+
+                st.plotly_chart(
+                    response["figure"],
+                    use_container_width=True
+                )
+
+                assistant_message = (
+                    f"Generated a visualization for your request: "
+                    f"**{prompt}**"
+                )
+
+                st.markdown(assistant_message)
+
+            else:
+
+                assistant_message = response["content"]
+
+                st.markdown(
+                    assistant_message
+                )
+
+        # -----------------------------------------
+        # Store Conversation History
+        # -----------------------------------------
         app_state.chat_history.append({
             "role": "user",
             "content": prompt
@@ -122,5 +156,5 @@ How can I help you today?
 
         app_state.chat_history.append({
             "role": "assistant",
-            "content": response
+            "content": assistant_message
         })

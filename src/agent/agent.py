@@ -1,118 +1,314 @@
 from ollama import chat
+import json
+
 from src.core.app_state import app_state
+from src.visualisation.visualisation_engine import VisualizationEngine
+
 
 class DataMindAgent:
+
     def __init__(self):
         self.model = "qwen3:8b"
-    
-    
+
     def _system_prompt(self):
+
         profile = app_state.dataset_profile
         plan = app_state.preprocessing_plan
-        
-        return f'''
-        You are DataMindAI.
-        
-        You are an expert AI Data Scientist.
-        
-        Answer only using only the information available below.
-        
-        =========================
-        DATASET INFORMATION
-        =========================
-        
-        Dataset Name : {profile.dataset_name}
-        
-        Rows : {profile.rows} 
-        
-        Columns : {profile.columns}
-        
-        Memory Usage: {profile.memory_usage}
+        columns = list(app_state.dataset.columns)
 
-        Health Score: {profile.health_score}
+        return f"""
+You are DataMindAI, an autonomous AI Data Scientist.
 
-        Health Status: {profile.health_status}
+You have access to the user's dataset.
 
-        Missing Values: {profile.missing_values}
+Your job is to understand the user's natural-language request and decide
+what DataMindAI should do.
 
-        Duplicate Rows: {profile.duplicate_rows}
+==================================================
+AVAILABLE DATASET COLUMNS
+==================================================
 
-        Numerical Columns: {profile.numerical_columns}
+{columns}
 
-        Categorical Columns: {profile.categorical_columns}
+==================================================
+DATASET INFORMATION
+==================================================
 
-        Boolean Columns: {profile.boolean_columns}
+Dataset Name:
+{profile.dataset_name}
 
-        Datetime Columns: {profile.datetime_columns}
+Rows:
+{profile.rows}
 
-        =========================
-        TARGET ANALYSIS
-        =========================
+Columns:
+{profile.columns}
 
-        {profile.target_analysis}
+Health Score:
+{profile.health_score}
 
-        =========================
-        CORRELATION
-        =========================
+Health Status:
+{profile.health_status}
 
-        {profile.correlation_insights}
+Missing Values:
+{profile.missing_values}
 
-        =========================
-        OUTLIERS
-        =========================
+Duplicate Rows:
+{profile.duplicate_rows}
 
-        {profile.outlier_summary}
+Numerical Columns:
+{profile.numerical_columns}
 
-        =========================
-        FEATURE QUALITY
-        =========================
+Categorical Columns:
+{profile.categorical_columns}
 
-        {profile.feature_quality_summary}
+Boolean Columns:
+{profile.boolean_columns}
 
-        =========================
-        PREPROCESSING PLAN
-        =========================
+Datetime Columns:
+{profile.datetime_columns}
 
-        Missing Value Strategy:
-        {plan.missing_value_plan}
+==================================================
+TARGET ANALYSIS
+==================================================
 
-        Encoding Strategy:
-        {plan.encoding_plan}
+{profile.target_analysis}
 
-        Scaling Strategy:
-        {plan.scaling_plan}
+==================================================
+CORRELATION INSIGHTS
+==================================================
 
-        Feature Selection:
-        {plan.feature_selection_plan}
+{profile.correlation_insights}
 
-        Outlier Treatment:
-        {plan.outlier_treatment_plan}
+==================================================
+OUTLIER SUMMARY
+==================================================
 
-        Train/Test Recommendation:
-        {plan.train_test_plan}
+{profile.outlier_summary}
 
-        Pipeline Summary:
-        {plan.pipeline_summary}
-        
-        If the user asks for a graph, model training,
-        prediction, preprocessing execution or any task
-        that requires computation, do not fabricate the result.
-        Simply explain that the capability will be executed
-        once the corresponding tool is available.
-    
-        '''
-    
-    def chat(self, prompt , history):
-        messages = []
-        
-        messages.append({'role' : 'system' , 'content' : self._system_prompt()})
-        
+==================================================
+FEATURE QUALITY
+==================================================
+
+{profile.feature_quality_summary}
+
+==================================================
+PREPROCESSING PLAN
+==================================================
+
+Missing Values:
+{plan.missing_value_plan}
+
+Encoding:
+{plan.encoding_plan}
+
+Scaling:
+{plan.scaling_plan}
+
+Feature Selection:
+{plan.feature_selection_plan}
+
+Outlier Treatment:
+{plan.outlier_treatment_plan}
+
+Train/Test Recommendation:
+{plan.train_test_plan}
+
+Pipeline Summary:
+{plan.pipeline_summary}
+
+==================================================
+COLUMN UNDERSTANDING
+==================================================
+
+The user does NOT need to type exact column names.
+
+You must map natural-language descriptions to the most appropriate
+actual dataset columns.
+
+For example, if the dataset contains:
+
+"hiring_rate_pct"
+"gdp_growth_us_pct"
+
+and the user asks:
+
+"Show me the relationship between hiring and gdp"
+
+you must identify:
+
+column1 = "hiring_rate_pct"
+column2 = "gdp_growth_us_pct"
+
+Other examples:
+
+"salary" can match "annual_salary"
+
+"age" can match "employee_age"
+
+"sales" can match "monthly_sales"
+
+"profit" can match "net_profit_margin"
+
+Always use the exact actual column name in the JSON response.
+
+==================================================
+VISUALIZATION
+==================================================
+
+If the user asks to visualize, compare, plot, graph, chart,
+show a relationship, show a trend, or asks for a visualization
+between two concepts:
+
+1. Identify the two most relevant actual dataset columns.
+2. Do NOT require the user to provide exact column names.
+3. Return the exact dataset column names.
+4. Let Python choose the best visualization type.
+
+Return ONLY:
+
+{{
+    "action": "visualize",
+    "column1": "actual_dataset_column",
+    "column2": "actual_dataset_column"
+}}
+
+Do NOT decide the chart type yourself.
+
+Python will automatically select the appropriate chart.
+
+==================================================
+NORMAL QUESTIONS
+==================================================
+
+For normal questions that do not require executing a tool, return:
+
+{{
+    "action": "chat",
+    "response": "your answer"
+}}
+
+==================================================
+IMPORTANT
+==================================================
+
+Return ONLY valid JSON.
+
+Do not use markdown.
+
+Do not add explanations outside the JSON.
+
+Never invent column names.
+"""
+
+    def _execute_action(self, result):
+
+        action = result.get("action")
+
+        # ==================================================
+        # VISUALIZATION
+        # ==================================================
+
+        if action == "visualize":
+
+            column1 = result.get("column1")
+            column2 = result.get("column2")
+
+            if not column1 or not column2:
+
+                return {
+                    "type": "text",
+                    "content": (
+                        "I couldn't determine the two columns "
+                        "you want to visualize."
+                    )
+                }
+
+            try:
+
+                engine = VisualizationEngine(
+                    app_state.dataset
+                )
+
+                figure = engine.generate(
+                    column1,
+                    column2
+                )
+
+                return {
+                    "type": "visualization",
+                    "figure": figure,
+                    "column1": column1,
+                    "column2": column2
+                }
+
+            except Exception as error:
+
+                return {
+                    "type": "text",
+                    "content": (
+                        f"I couldn't generate the visualization: "
+                        f"{error}"
+                    )
+                }
+
+        # ==================================================
+        # NORMAL CHAT
+        # ==================================================
+
+        if action == "chat":
+
+            return {
+                "type": "text",
+                "content": result.get(
+                    "response",
+                    "I could not generate a response."
+                )
+            }
+
+        return {
+            "type": "text",
+            "content": (
+                "I couldn't determine what action to perform."
+            )
+        }
+
+    def chat(self, prompt, history):
+
+        messages = [
+            {
+                "role": "system",
+                "content": self._system_prompt()
+            }
+        ]
+
         for message in history:
-            messages.append({'role' : message['role'], 'content': message['content'] })
-        
-        messages.append({'role' : 'user' , 'content' : prompt})
-        
-        response = chat(model=self.model , messages=messages)
-        # print(response)
-        return str(response)
-        
+
+            messages.append({
+                "role": message["role"],
+                "content": message["content"]
+            })
+
+        messages.append({
+            "role": "user",
+            "content": prompt
+        })
+
+        response = chat(
+            model=self.model,
+            messages=messages
+        )
+
+        content = response["message"]["content"]
+
+        try:
+
+            result = json.loads(content)
+
+        except json.JSONDecodeError:
+
+            return {
+                "type": "text",
+                "content": content
+            }
+
+        return self._execute_action(result)
