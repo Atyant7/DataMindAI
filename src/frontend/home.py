@@ -2,31 +2,42 @@ import streamlit as st
 
 
 def show_home():
-
     st.title("🧠 DataMindAI")
-
     st.subheader("Your Autonomous AI Data Scientist")
-
     st.divider()
 
     st.markdown(
         """
 ### 👋 Welcome!
 
-Upload your dataset and ask questions in natural language.
+Upload a dataset and interact with it using natural language.
 
-### Example Prompts
+### Currently available
 
-- Analyze my dataset
-- Show every graph between Age and Salary
-- Remove duplicate rows
-- Fill missing values using median
-- Train the best regression model
-- Predict salary for this employee
-- Why did sales increase in February 2017?
+- Understand the dataset automatically
+- Inspect missing values and duplicates
+- Analyze column types and statistics
+- Detect outliers and feature-quality issues
+- Analyze correlations
+- Review preprocessing recommendations
+- Ask questions about the dataset
+- Generate visualizations using natural-language requests
+
+### Coming next
+
+- Automated ML model competition
+- XGBoost / LightGBM training
+- Best-model selection
+- Model explainability
+- Prediction workspace
+- Experiment tracking
+- What-if analysis
+- Evidence-based reports
 """
     )
 
     st.divider()
 
-    st.info("⬅ Upload a dataset from the sidebar. I'll analyze it automatically and we'll start chatting.")
+    st.info(
+        "⬅ Upload a CSV or XLSX dataset from the sidebar to begin."
+    )

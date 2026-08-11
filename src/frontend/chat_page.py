@@ -1,160 +1,184 @@
+"""Clean ChatGPT-style dataset Q&A interface for DataMindAI."""
+
+from __future__ import annotations
+
 import streamlit as st
 
-from src.core.app_state import app_state
 from src.agent.agent import DataMindAgent
+from src.core.app_state import app_state
 
 
-def show_chat_page():
-    """
-    Main conversational interface of DataMindAI.
-    """
+def _apply_chat_style() -> None:
+    """Apply only layout styling; all visible UI uses native Streamlit widgets."""
+    st.markdown(
+        """
+        <style>
+        .block-container {
+            max-width: 900px;
+            padding-top: 1rem;
+            padding-bottom: 6rem;
+        }
 
-    profile = app_state.dataset_profile
+        [data-testid="stChatMessage"] {
+            padding-top: 0.65rem;
+            padding-bottom: 0.65rem;
+        }
 
-    # ---------------------------------------------
-    # Header
-    # ---------------------------------------------
-    st.title("🧠 DataMindAI")
+        [data-testid="stChatMessageContent"] {
+            max-width: 760px;
+            line-height: 1.65;
+        }
 
-    st.caption("Your Autonomous AI Data Scientist")
+        [data-testid="stChatInput"] {
+            width: min(900px, calc(100vw - 2rem));
+            margin-left: auto;
+            margin-right: auto;
+        }
 
-    st.divider()
+        @media (max-width: 768px) {
+            .block-container {
+                padding-left: 0.75rem;
+                padding-right: 0.75rem;
+                padding-bottom: 6rem;
+            }
 
-    # ---------------------------------------------
-    # Dataset Summary
-    # ---------------------------------------------
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        st.metric(
-            "Rows",
-            profile.rows
-        )
-
-    with col2:
-        st.metric(
-            "Columns",
-            profile.columns
-        )
-
-    with col3:
-        st.metric(
-            "Health Score",
-            f"{profile.health_score}/100"
-        )
-
-    st.success(
-        f"Dataset Loaded Successfully : {profile.dataset_name}"
+            [data-testid="stChatInput"] {
+                width: calc(100vw - 1rem);
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
     )
 
-    st.divider()
 
-    # ---------------------------------------------
-    # Initialize Agent
-    # ---------------------------------------------
+def _render_empty_state() -> None:
+    """Render the initial chat state using native Streamlit elements."""
+    st.markdown(
+        "## How can I help?",
+    )
+
+    st.caption(
+        "Ask questions about your dataset, explore patterns, "
+        "calculate statistics, compare columns, or create "
+        "visualizations."
+    )
+
+    st.write("**Try asking:**")
+
+    suggestions = [
+        "Show me the top 5 companies by employees.",
+        "What is the average salary?",
+        "Which columns contain missing values?",
+        "Show the relationship between revenue and employees.",
+    ]
+
+    for suggestion in suggestions:
+        st.markdown(f"• {suggestion}")
+
+
+def _render_history() -> None:
+    """Render saved conversation messages in chronological order."""
+    for message in app_state.chat_history:
+        role = message.get("role", "assistant")
+        content = message.get("content", "")
+
+        if not content:
+            continue
+
+        with st.chat_message(role):
+            st.markdown(content)
+
+
+def _render_response(response: dict) -> str:
+    """Render an agent response and return text for chat history."""
+    if response.get("type") == "visualization":
+        figure = response.get("figure")
+
+        if figure is not None:
+            st.plotly_chart(
+                figure,
+                use_container_width=True,
+            )
+
+    content = response.get("content")
+
+    if not content:
+        content = "I couldn't generate a response for that question."
+
+    st.markdown(content)
+    return content
+
+
+def show_chat_page() -> None:
+    """Render the dataset Q&A workspace."""
+    if not app_state.has_dataset():
+        st.info(
+            "Upload a dataset from the sidebar to start chatting."
+        )
+        return
+
+    _apply_chat_style()
+
+    st.title("🧠 DataMindAI")
+    st.caption("AI Data Analyst")
+
     if app_state.agent is None:
         app_state.agent = DataMindAgent()
 
-    agent = app_state.agent
+    if app_state.chat_history:
+        _render_history()
+    else:
+        _render_empty_state()
 
-    # ---------------------------------------------
-    # Initialize Chat History
-    # ---------------------------------------------
-    if len(app_state.chat_history) == 0:
-
-        app_state.chat_history.append({
-            "role": "assistant",
-            "content": """
-Hello! I'm **DataMindAI** 👋
-
-I've already analyzed your dataset and prepared a preprocessing plan.
-
-You can now ask me things like:
-
-• Analyze my dataset
-
-• Show the relationship between Age and Salary
-
-• Train the best model
-
-• Explain the preprocessing plan
-
-• Predict using the trained model
-
-How can I help you today?
-"""
-        })
-
-    # ---------------------------------------------
-    # Display Chat History
-    # ---------------------------------------------
-    for message in app_state.chat_history:
-
-        with st.chat_message(message["role"]):
-
-            st.markdown(message["content"])
-
-    # ---------------------------------------------
-    # Chat Input
-    # ---------------------------------------------
     prompt = st.chat_input(
-        "Ask anything about your dataset..."
+        "Message DataMindAI..."
     )
 
-    if prompt:
+    if prompt is None:
+        return
 
-        # -----------------------------------------
-        # Display User Message
-        # -----------------------------------------
-        with st.chat_message("user"):
-            st.markdown(prompt)
+    prompt = prompt.strip()
 
-        # -----------------------------------------
-        # Get Agent Response
-        # -----------------------------------------
-        with st.spinner("Thinking..."):
+    if not prompt:
+        return
 
-            response = agent.chat(
-                prompt,
-                app_state.chat_history
-            )
+    previous_history = list(
+        app_state.chat_history
+    )
 
-        # -----------------------------------------
-        # Display Response
-        # -----------------------------------------
-        with st.chat_message("assistant"):
+    with st.chat_message("user"):
+        st.markdown(prompt)
 
-            if response["type"] == "visualization":
-
-                st.plotly_chart(
-                    response["figure"],
-                    use_container_width=True
+    with st.chat_message("assistant"):
+        with st.spinner("Analyzing your data..."):
+            try:
+                response = app_state.agent.chat(
+                    prompt,
+                    previous_history,
                 )
+            except Exception as exc:
+                response = {
+                    "type": "text",
+                    "content": (
+                        "I couldn't complete that request.\n\n"
+                        f"`{exc}`"
+                    ),
+                }
 
-                assistant_message = (
-                    f"Generated a visualization for your request: "
-                    f"**{prompt}**"
-                )
+        assistant_message = _render_response(
+            response
+        )
 
-                st.markdown(assistant_message)
-
-            else:
-
-                assistant_message = response["content"]
-
-                st.markdown(
-                    assistant_message
-                )
-
-        # -----------------------------------------
-        # Store Conversation History
-        # -----------------------------------------
-        app_state.chat_history.append({
-            "role": "user",
-            "content": prompt
-        })
-
-        app_state.chat_history.append({
-            "role": "assistant",
-            "content": assistant_message
-        })
+    app_state.chat_history.extend(
+        [
+            {
+                "role": "user",
+                "content": prompt,
+            },
+            {
+                "role": "assistant",
+                "content": assistant_message,
+            },
+        ]
+    )
