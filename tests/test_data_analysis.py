@@ -151,6 +151,21 @@ class TestDataAnalysisTool(
             180.0,
         )
 
+    def test_groupby_accepts_generic_column_alias(self):
+
+        result = self.tool.execute(
+            "groupby",
+            group_column="company",
+            column="revenue",
+            aggregation="mean",
+            order="descending",
+            limit=2,
+        )
+
+        self.assertTrue(result.success)
+        self.assertEqual(result.evidence["value_column"], "revenue")
+        self.assertEqual(result.evidence["groups"][0]["company"], "Microsoft")
+
     # ========================================================
     # RANK
     # ========================================================

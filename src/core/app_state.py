@@ -41,6 +41,9 @@ class AppState:
 
         self.trained_model = None
         self.model_metadata = None
+        self.model_artifact = None
+        self.automl_result = None
+        self.last_explanation = None
 
         self.experiment_history = []
 
@@ -70,6 +73,13 @@ class AppState:
         self.chat_history = []
 
         self.agent = None
+
+        # ----------------------------------------------------
+        # User & Project context
+        # ----------------------------------------------------
+
+        self.active_user_id = None
+        self.active_project_id = None
 
     # ========================================================
     # CHAT RESET
@@ -105,6 +115,28 @@ class AppState:
         """
 
         return self.dataset is not None
+
+    # ========================================================
+    # TRAINED MODEL
+    # ========================================================
+
+    def has_trained_model(self) -> bool:
+        """
+        Return True when a trained model artifact or model exists.
+        """
+
+        return (
+            self.model_artifact is not None
+            or self.trained_model is not None
+            or self.automl_result is not None
+        )
+
+    def get_model_artifact(self):
+        """
+        Return the current ModelArtifact if available.
+        """
+
+        return self.model_artifact
 
     # ========================================================
     # DATASET COMPARISON

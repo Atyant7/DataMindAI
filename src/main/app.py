@@ -21,18 +21,54 @@ from src.core.exceptions import (
 )
 from src.core.logger import get_logger
 
+from src.database.init_db import init_db
+from src.frontend.auth_page import show_auth_page
 from src.frontend.chat_page import (
     show_chat_page,
 )
 from src.frontend.home import (
     show_home,
 )
+from src.frontend.prediction_page import (
+    show_prediction_page,
+)
+from src.frontend.preprocessing_workspace import (
+    show_processing_workspace,
+)
+from src.frontend.projects_page import (
+    show_projects_page,
+)
+from src.frontend.settings_page import (
+    show_settings_page,
+)
 from src.frontend.sidebar import (
     show_sidebar,
 )
+from src.frontend.styles import (
+    apply_theme,
+)
+from src.frontend.top_bar import (
+    render_top_bar,
+)
+from src.frontend.visualization_page import (
+    show_visualization_page,
+)
+from src.frontend.workspace import (
+    show_workspace,
+)
+
+from src.services.activity_service import ActivityService
+from src.services.dataset_service import DatasetService
+from src.services.model_registry_service import ModelRegistryService
+from src.services.notification_service import NotificationService
+
+import plotly.express as px
 
 from src.ml import (
     run_ml_pipeline,
+)
+from src.ml.explainability import (
+    explain_training_result,
 )
 from src.ml.model_persistence import (
     save_best_model,
@@ -59,12 +95,14 @@ def initialize_application():
     """
 
     ensure_project_directories()
+    init_db()
 
     st.set_page_config(
-        page_title="DataMindAI",
+        page_title="DataMind AI",
         page_icon="🧠",
         layout="wide",
     )
+
 
 
 # ============================================================
@@ -404,6 +442,42 @@ def render_automl_workspace(
                     model_directory="artifacts/models",
                 )
 
+                # Register in DB Model Registry if project is active
+                user = st.session_state.get("user")
+                curr_proj = st.session_state.get("current_project")
+                if user and curr_proj:
+                    try:
+                        ModelRegistryService.register_model(
+                            user_id=user["id"],
+                            project_id=curr_proj["id"],
+                            model_name=artifact.model_name,
+                            display_name=artifact.display_name,
+                            task=artifact.task,
+                            target_column=artifact.target_column,
+                            artifact_path=artifact.model_path,
+                            metadata_path=artifact.metadata_path,
+                            feature_names=artifact.feature_names,
+                            metrics={result.model_selection.primary_metric: result.model_selection.primary_score},
+                            training_config={"models_tested": list(result.training_results.keys())},
+                            is_best=True,
+                        )
+                        ActivityService.log_activity(
+                            user_id=user["id"],
+                            project_id=curr_proj["id"],
+                            action="model_trained",
+                            title=f"Trained {result.best_model_display_name} model",
+                            description=f"Target: {artifact.target_column} ({artifact.task})",
+                            icon="🧠",
+                        )
+                        NotificationService.create_notification(
+                            user_id=user["id"],
+                            title="AutoML Training Complete",
+                            message=f"Best model '{result.best_model_display_name}' saved.",
+                            level="success",
+                        )
+                    except Exception as reg_err:
+                        logger.warning("AutoML DB registration error: %s", reg_err)
+
             # ------------------------------------------------
             # Store result
             # ------------------------------------------------
@@ -411,6 +485,16 @@ def render_automl_workspace(
             st.session_state[
                 "automl_result"
             ] = result
+
+            # ------------------------------------------------
+            # Synchronize with global application state
+            # ------------------------------------------------
+
+            app_state.automl_result = result
+            app_state.model_artifact = artifact
+            app_state.trained_model = result.best_training_result.pipeline
+            app_state.model_metadata = artifact.to_dict()
+            app_state.current_task = result.task.value
 
             # ------------------------------------------------
             # Store target associated with result
@@ -697,6 +781,69 @@ def render_automl_workspace(
             report_df,
             use_container_width=True,
         )
+
+    # --------------------------------------------------------
+    # Feature Importance & Explainability
+    # --------------------------------------------------------
+
+    st.markdown(
+        "### 🧠 Feature Importance & Explainability"
+    )
+
+    try:
+        best_training = result.best_training_result
+        X_explain = df.drop(columns=[result.target_column])
+        y_explain = df[result.target_column]
+
+        explanation = explain_training_result(
+            best_training,
+            X=X_explain,
+            y=y_explain,
+        )
+        app_state.last_explanation = explanation
+
+        st.info(
+            f"Global feature importance calculated using **{explanation.method}** "
+            f"for **{result.best_model_display_name}**."
+        )
+
+        top_df = explanation.to_dataframe()
+
+        if not top_df.empty:
+            importance_col1, importance_col2 = st.columns([3, 2])
+
+            with importance_col1:
+                fig_importance = px.bar(
+                    top_df.sort_values("importance", ascending=True).tail(10),
+                    x="importance",
+                    y="feature",
+                    orientation="h",
+                    title=f"Top Features ({result.best_model_display_name})",
+                    labels={"importance": "Importance Score", "feature": "Feature"},
+                    color="importance",
+                    color_continuous_scale="Blues",
+                )
+                fig_importance.update_layout(
+                    showlegend=False,
+                    margin=dict(l=10, r=10, t=40, b=20),
+                    height=350,
+                )
+                st.plotly_chart(
+                    fig_importance,
+                    use_container_width=True,
+                )
+
+            with importance_col2:
+                st.write("**Feature Importance Ranking**")
+                display_cols = [c for c in ["rank", "feature", "importance", "direction"] if c in top_df.columns]
+                st.dataframe(
+                    top_df[display_cols],
+                    use_container_width=True,
+                    hide_index=True,
+                )
+    except Exception as exp_err:
+        logger.warning("AutoML explainability rendering error: %s", exp_err)
+        st.caption("Feature importance could not be computed for this model.")
 
     # --------------------------------------------------------
     # Pipeline warnings
@@ -1152,20 +1299,27 @@ def render_prediction_workspace(
 def main():
     initialize_application()
 
-    # show_sidebar returns BOTH the uploaded file and the selected
-    # workspace. The previous version assigned the whole tuple to
-    # uploaded_file, which caused:
-    #     'tuple' object has no attribute 'getvalue'
+    # --------------------------------------------------------
+    # User Authentication Gate
+    # --------------------------------------------------------
+    user = st.session_state.get("user")
+    if user is None:
+        apply_theme("dark")
+        show_auth_page()
+        return
+
+    # Apply user's active theme
+    current_theme = st.session_state.get("theme", user.get("theme_preference", "dark"))
+    apply_theme(current_theme)
+
+    # Render global SaaS top bar
+    render_top_bar(user, st.session_state.get("current_project"))
+
     uploaded_file, active_section = show_sidebar()
 
     # --------------------------------------------------------
     # Dataset loading
     # --------------------------------------------------------
-    #
-    # If a dataset is already loaded, a navigation rerun does not
-    # need to reload it. If a new file was uploaded, load it.
-    # --------------------------------------------------------
-
     if uploaded_file is not None:
         try:
             signature = get_file_signature(uploaded_file)
@@ -1175,6 +1329,32 @@ def main():
                 signature,
             ):
                 load_dataset(uploaded_file)
+
+                # Persist dataset to project storage if active
+                current_project = st.session_state.get("current_project")
+                if current_project:
+                    try:
+                        DatasetService.save_dataset(
+                            user_id=user["id"],
+                            project_id=current_project["id"],
+                            file_obj=uploaded_file,
+                            filename=uploaded_file.name,
+                        )
+                        ActivityService.log_activity(
+                            user_id=user["id"],
+                            project_id=current_project["id"],
+                            action="dataset_uploaded",
+                            title=f"Uploaded dataset '{uploaded_file.name}'",
+                            icon="📊",
+                        )
+                        NotificationService.create_notification(
+                            user_id=user["id"],
+                            title="Dataset Uploaded",
+                            message=f"'{uploaded_file.name}' uploaded successfully.",
+                            level="success",
+                        )
+                    except Exception as save_err:
+                        logger.warning("Could not persist dataset to storage: %s", save_err)
 
         except DataMindAIError as error:
             st.error(str(error))
@@ -1194,34 +1374,51 @@ def main():
             return
 
     # --------------------------------------------------------
-    # No dataset
+    # Navigation and Workspaces
     # --------------------------------------------------------
+    if active_section in ("Dashboard", "Home"):
+        show_home(user)
 
-    if not app_state.has_dataset():
-        show_home()
-        return
+    elif active_section == "Projects":
+        show_projects_page(user)
 
-    # --------------------------------------------------------
-    # Separate workspaces
-    # --------------------------------------------------------
-
-    if active_section == "Chat":
+    elif active_section == "Chat":
         show_chat_page()
 
-    elif active_section == "Model":
+    elif active_section == "Dataset":
+        show_workspace()
+
+    elif active_section == "Visualization":
+        show_visualization_page()
+
+    elif active_section == "Preprocessing":
+        show_processing_workspace()
+
+    elif active_section in ("Model", "Models"):
         render_automl_workspace(
             app_state.dataset
         )
 
     elif active_section == "Prediction":
-        render_prediction_workspace(
-            app_state.dataset
+        proj_id = (
+            st.session_state["current_project"]["id"]
+            if st.session_state.get("current_project")
+            else None
+        )
+        show_prediction_page(
+            user_id=user["id"],
+            project_id=proj_id,
+        )
+
+    elif active_section == "Settings":
+        show_settings_page(
+            user_data=user,
+            current_project=st.session_state.get("current_project"),
         )
 
     else:
-        # Defensive fallback.
-        st.session_state["active_section"] = "Chat"
-        show_chat_page()
+        st.session_state["active_section"] = "Dashboard"
+        show_home(user)
 
 
 # ============================================================

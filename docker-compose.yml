@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: datamind_app
+    restart: unless-stopped
+    ports:
+      - "8501:8501"
+    environment:
+      - ENVIRONMENT=production
+      - DATABASE_URL=postgresql://datamind_user:datamind_pass@postgres:5432/datamind_db
+      - SECRET_KEY=replace-with-a-real-production-secret-key
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - OLLAMA_MODEL=qwen3:8b
+      - STORAGE_PATH=/app/artifacts/storage
+    volumes:
+      - app_artifacts:/app/artifacts
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: datamind_postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=datamind_user
+      - POSTGRES_PASSWORD=datamind_pass
+      - POSTGRES_DB=datamind_db
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+volumes:
+  pgdata:
+  app_artifacts:

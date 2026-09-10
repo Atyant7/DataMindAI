@@ -22,3 +22,7 @@ datasets/raw/
 
 # macOS Files
 .DS_Store
+
+# Databases & Local Storage
+*.db
+artifacts/storage/

@@ -197,6 +197,23 @@ class DataAnalysisTool:
 
         try:
 
+            # LLM tool calls occasionally use the generic ``column`` field
+            # for a group-by's numeric value.  Accept that documented alias
+            # so an otherwise valid request does not fail with an unexpected
+            # keyword-argument error.
+            if operation == "groupby":
+                parameters = dict(parameters)
+                column = parameters.pop("column", None)
+                if parameters.get("value_column") is None and column is not None:
+                    parameters["value_column"] = column
+
+                # ``order`` is used by rank; ``sort`` is the group-by API.
+                # Normalizing it here makes the public tool interface more
+                # forgiving without changing the calculation itself.
+                order = parameters.pop("order", None)
+                if parameters.get("sort") is None and order is not None:
+                    parameters["sort"] = order
+
             if operation == "overview":
 
                 return self._overview()
@@ -320,6 +337,7 @@ class DataAnalysisTool:
                 include=[
                     "object",
                     "category",
+                    "string",
                 ]
             )
             .columns

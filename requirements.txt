@@ -42,3 +42,8 @@ ollama
 # Data Validation
 # -------------------------
 pydantic
+
+# -------------------------
+# Database / ORM
+# -------------------------
+sqlalchemy>=2.0.0
